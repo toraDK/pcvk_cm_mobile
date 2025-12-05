@@ -1,79 +1,61 @@
 from flask import Flask, request, jsonify
-import cv2
 import numpy as np
-from PIL import Image
-import io
-import base64
-from sklearn import svm
-import joblib  # untuk load/save model SVM
+import joblib
+import cv2
 
 app = Flask(__name__)
 
-# ==== Load Haar Cascade ====
-cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-face_cascade = cv2.CascadeClassifier(cascade_path)
-if face_cascade.empty():
-    print("❌ Haar Cascade XML not found!")
-else:
-    print("✅ Haar Cascade loaded successfully")
-
-# ==== Dummy SVM Model / Load Model Sebenarnya ====
-# Contoh: kalau belum punya model, kita bikin dummy SVM
-# nanti diganti dengan model hasil training
+# Load model ANN sementara
 try:
-    svm_model = joblib.load("svm_model.pkl")
-    print("✅ SVM model loaded")
+    scaler = joblib.load("models/scaler_ann.pkl")
+    print("✔ scaler_ann.pkl loaded")
 except:
-    # buat dummy model sementara
-    svm_model = svm.SVC()
-    print("⚠️ SVM model belum ada, prediksi dummy")
+    scaler = None
+    print("❌ scaler_ann.pkl NOT FOUND — running dummy processing")
 
-# ==== Fungsi deteksi wajah ====
-def detect_and_crop_face(image):
+
+def preprocess_image(image):
+    """
+    Preprocessing minimal untuk mobile testing
+    - resize ke 64x64
+    - grayscale
+    - reshape ke 1D vector (4096 dim)
+    """
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(
-        gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
-    )
-    if len(faces) > 0:
-        faces = sorted(faces, key=lambda x: x[2]*x[3], reverse=True)
-        x, y, w, h = faces[0]
-        cropped_face = gray[y:y+h, x:x+w]
-        return cropped_face
-    return None
+    resized = cv2.resize(gray, (64, 64))
+    flat = resized.flatten().astype("float32") / 255.0
+    return flat.reshape(1, -1)
 
-# ==== Endpoint API ====
+
 @app.route("/predict", methods=["POST"])
 def predict():
-    if "file" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
+    file = request.files.get("image")
 
-    file = request.files["file"]
-    image_bytes = file.read()
-    pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    open_cv_image = np.array(pil_image)[:, :, ::-1].copy()  # RGB -> BGR
+    if not file:
+        return jsonify(success=False, error="No image uploaded")
 
-    cropped_face = detect_and_crop_face(open_cv_image)
-    if cropped_face is None:
-        return jsonify({"kelas": "No face detected"})
+    npimg = np.frombuffer(file.read(), np.uint8)
+    img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
-    # ==== Preprocessing untuk SVM ====
-    resized_face = cv2.resize(cropped_face, (100, 100))  # contoh ukuran
-    flat_face = resized_face.flatten().reshape(1, -1)
+    if img is None:
+        return jsonify(success=False, error="Invalid image format")
 
-    # ==== Prediksi kelas ====
-    try:
-        predicted_class = svm_model.predict(flat_face)[0]  # Asia/Afrika/Eropa
-    except:
-        predicted_class = "Asia"  # dummy sementara
+    features = preprocess_image(img)
 
-    # ==== Optional: encode cropped face ke base64 untuk preview di Flutter ====
-    _, buffer = cv2.imencode('.jpg', cropped_face)
-    face_b64 = base64.b64encode(buffer).decode('utf-8')
+    if scaler is not None:
+        try:
+            scaled = scaler.transform(features)
+            result = "processed_with_model"
+        except Exception as e:
+            return jsonify(success=False, error=str(e))
 
-    return jsonify({
-        "kelas": predicted_class,
-        "face_crop": face_b64
-    })
+    else:
+        scaled = features  # fallback dummy
+        result = "dummy_processed"
+
+    return jsonify(success=True, status=result, features_dim=scaled.shape[1])
+
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    print("✔ API Ready for Mobile Testing")
+    app.run(debug=True)

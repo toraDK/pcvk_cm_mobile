@@ -47,28 +47,39 @@ class _PredictPageState extends State<PredictPage> {
     try {
       var request = http.MultipartRequest(
         "POST",
-        Uri.parse("http://IP-OR-URL-KAMU:5000/predict"),
+        // GANTI DENGAN IP KOMPUTER KAMU !!!
+        Uri.parse("http://127.0.0.1:5000/predict"),  
+        // atau http://10.0.2.2:5000/predict kalau pakai Android Emulator
       );
 
-      request.files.add(await http.MultipartFile.fromPath("file", file.path));
+      // ← NAMA FIELD DIUBAH JADI "image"
+      request.files.add(
+        await http.MultipartFile.fromPath("image", file.path),
+      );
 
       var response = await request.send();
-      var body = await response.stream.bytesToString();
+      var responseBody = await response.stream.bytesToString();
 
-      print("API Response: $body");
+      print("Status: ${response.statusCode}");
+      print("Response: $responseBody");
 
-      var jsonData = json.decode(body);
-
-      setState(() {
-        result = jsonData["kelas"].toString();
-      });
+      if (response.statusCode == 200) {
+        var jsonData = json.decode(responseBody);
+        setState(() {
+          result = jsonData["kelas"]?.toString() ?? "Tidak ada hasil";
+        });
+      } else {
+        setState(() {
+          result = "Server Error: ${response.statusCode}";
+        });
+      }
     } catch (e) {
       setState(() {
         result = "Error: $e";
       });
+    } finally {
+      setState(() => isLoading = false);
     }
-
-    setState(() => isLoading = false);
   }
 
   @override
@@ -92,32 +103,87 @@ class _PredictPageState extends State<PredictPage> {
                     child: Text("Belum ada gambar"),
                   ),
 
-            SizedBox(height: 30),
+            // GANTI SELURUH BAGIAN BUTTON DENGAN INI
+SizedBox(height: 40),
 
-            // ==== BUTTON ====
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton(onPressed: pickImage, child: Text("Pilih Foto")),
-                SizedBox(width: 20),
-                ElevatedButton(
-                  onPressed: pickFromCamera,
-                  child: Text("Ambil Kamera"),
-                ),
-              ],
+// TIGA TOMBOL SEJAJAR DENGAN UKURAN SAMA
+Row(
+  mainAxisAlignment: MainAxisAlignment.center,
+  children: [
+    // 1. TOMBOL PILIH FOTO
+    ElevatedButton.icon(
+      onPressed: pickImage,
+      icon: Icon(Icons.photo_library, size: 20),
+      label: Text("Pilih Foto"),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.grey[200],
+        foregroundColor: Colors.black87,
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+      ),
+    ),
+
+    SizedBox(width: 15),
+
+    // 2. TOMBOL AMBIL KAMERA
+    ElevatedButton.icon(
+      onPressed: pickFromCamera,
+      icon: Icon(Icons.camera_alt, size: 20),
+      label: Text("Ambil Kamera"),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.grey[200],
+        foregroundColor: Colors.black87,
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+      ),
+    ),
+
+    SizedBox(width: 15),
+
+    // 3. TOMBOL PREDIKSI SEKARANG (UKURAN & TINGGI SAMA!)
+    ElevatedButton(
+      onPressed: (image != null) && !isLoading
+          ? () => sendToAPI(image!)
+          : null,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.deepPurple,
+        foregroundColor: Colors.white,
+        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14), // sama dengan yang lain
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        elevation: 4,
+      ),
+      child: isLoading
+          ? SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2.5,
+              ),
+            )
+          : Text(
+              "PREDIKSI SEKARANG",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
+    ),
+  ],
+),
 
+            // TAMPILKAN HASIL PREDIKSI JIKA ADA
             SizedBox(height: 30),
-
-            // ==== LOADING / RESULT ====
-            isLoading
-                ? CircularProgressIndicator()
-                : result != null
-                ? Text(
-                    "Hasil Prediksi: $result",
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  )
-                : Text("Belum ada hasil"),
+            if (result != null)
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple[50],
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  result!,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+                  textAlign: TextAlign.center,
+                ),
+              ),
           ],
         ),
       ),
