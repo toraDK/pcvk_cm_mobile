@@ -47,14 +47,11 @@ class _PredictPageState extends State<PredictPage> {
     try {
       var request = http.MultipartRequest(
         "POST",
-        // GANTI DENGAN IP KOMPUTER KAMU !!!
-        Uri.parse("http://127.0.0.1:5000/predict"),  
-        // atau http://10.0.2.2:5000/predict kalau pakai Android Emulator
+        Uri.parse("http://10.0.2.2:7860/predict"), // Android Emulator IP!
       );
 
-      // ← NAMA FIELD DIUBAH JADI "image"
       request.files.add(
-        await http.MultipartFile.fromPath("image", file.path),
+        await http.MultipartFile.fromPath("file", file.path),
       );
 
       var response = await request.send();
@@ -66,7 +63,8 @@ class _PredictPageState extends State<PredictPage> {
       if (response.statusCode == 200) {
         var jsonData = json.decode(responseBody);
         setState(() {
-          result = jsonData["kelas"]?.toString() ?? "Tidak ada hasil";
+          result = "${jsonData["prediction"]} "
+                  "(Confidence: ${jsonData["confidence"].toStringAsFixed(2)}%)";
         });
       } else {
         setState(() {
